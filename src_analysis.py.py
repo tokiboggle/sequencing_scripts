@@ -3,8 +3,12 @@ import json
 import glob
 from Bio import SeqIO
 from Bio.Seq import Seq
+from Bio.Data import CodonTable
 from Bio.SeqUtils import seq1
 import numpy as np
+
+# Yeast-specific genetic code
+YEAST_GENETIC_CODE = CodonTable.unambiguous_dna_by_name["Saccharomyces cerevisiae"]
 
 def parse_sequences(input_file):
     """Parse sequences from FASTQ or PHD file"""
@@ -21,15 +25,17 @@ def parse_sequences(input_file):
         raise ValueError(f"Unsupported file type: {file_ext}")
 
 def detect_mutations(reference_dna, sample_dna):
-    """Detect DNA and protein mutations"""
+    """Detect DNA and protein mutations using yeast genetic code"""
     dna_mutations = [
         {'position': pos+1, 'reference': ref, 'sample': sample} 
         for pos, (ref, sample) in enumerate(zip(reference_dna, sample_dna)) 
         if ref != sample
     ]
     
-    ref_protein = reference_dna.translate()
-    sample_protein = sample_dna.translate()
+    # Use yeast-specific translation
+    ref_protein = reference_dna.translate(table=YEAST_GENETIC_CODE)
+    sample_protein = sample_dna.translate(table=YEAST_GENETIC_CODE)
+    
     protein_mutations = [
         {'position': pos+1, 'wild_type': seq1(wt), 'mutant': seq1(sample)} 
         for pos, (wt, sample) in enumerate(zip(ref_protein, sample_protein)) 
