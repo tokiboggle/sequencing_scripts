@@ -5,6 +5,7 @@ import argparse
 import subprocess
 import venv
 import pkg_resources
+import shutil
 
 def create_virtual_environment(project_dir):
     """Create virtual environment"""
@@ -18,13 +19,35 @@ def install_dependencies(venv_python):
     """Install required dependencies"""
     subprocess.run([venv_python, '-m', 'pip', 'install', '-r', 'requirements.txt'], check=True)
 
-def run_analysis(input_dir, reference_dna, wild_type_protein):
-    """Run analysis on sequencing files"""
-    from src.analysis import process_files
-    
+def setup_project_files(project_dir, input_dir):
+    """Setup project files including codon library"""
+    # Create analysis results directory
     results_dir = os.path.join(input_dir, 'analysis_results')
     os.makedirs(results_dir, exist_ok=True)
+
+    # Ensure codon library is in the correct location
+    codon_lib_source = os.path.join(project_dir, 'codon_lib.csv')
+    codon_lib_dest = os.path.join(os.path.dirname(input_dir), 'codon_lib.csv')
     
+    if not os.path.exists(codon_lib_dest):
+        if os.path.exists(codon_lib_source):
+            shutil.copy2(codon_lib_source, codon_lib_dest)
+        else:
+            raise FileNotFoundError("Could not find codon_lib.csv in project directory")
+    
+    return results_dir
+
+def run_analysis(input_dir, reference_dna, wild_type_protein):
+    """Run analysis on sequencing files"""
+    from src_analysis import process_files
+    
+    # Get project directory
+    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
+    # Setup results directory and ensure codon library is available
+    results_dir = setup_project_files(project_dir, input_dir)
+    
+    # Run the analysis
     process_files(input_dir, results_dir, reference_dna, wild_type_protein)
 
 def main():
@@ -36,7 +59,7 @@ def main():
     
     args = parser.parse_args()
     
-    project_dir = os.path.dirname(os.path.abspath(__file__))
+    project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     venv_python = create_virtual_environment(project_dir)
     
     install_dependencies(venv_python)

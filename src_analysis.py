@@ -3,12 +3,28 @@ import json
 import glob
 from Bio import SeqIO
 from Bio.Seq import Seq
-from Bio.Data import CodonTable
 from Bio.SeqUtils import seq1
 import numpy as np
+import csv
 
-# Yeast-specific genetic code
-YEAST_GENETIC_CODE = CodonTable.unambiguous_dna_by_name["Saccharomyces cerevisiae"]
+def load_codon_table():
+    """Load codon table from CSV file"""
+    codon_table = {}
+    with open('codon_lib.csv', 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            codon_table[row['Triplet']] = row['Amino acid']
+    return codon_table
+
+def translate_dna(sequence, codon_table):
+    """Translate DNA sequence using custom codon table"""
+    protein = []
+    for i in range(0, len(sequence), 3):
+        codon = str(sequence[i:i+3])
+        if len(codon) == 3:  # Only process complete codons
+            amino_acid = codon_table.get(codon, 'X')  # 'X' for unknown/invalid codons
+            protein.append(amino_acid)
+    return ''.join(protein)
 
 def parse_sequences(input_file):
     """Parse sequences from FASTQ or PHD file"""
@@ -24,20 +40,20 @@ def parse_sequences(input_file):
     else:
         raise ValueError(f"Unsupported file type: {file_ext}")
 
-def detect_mutations(reference_dna, sample_dna):
-    """Detect DNA and protein mutations using yeast genetic code"""
+def detect_mutations(reference_dna, sample_dna, codon_table):
+    """Detect DNA and protein mutations using custom codon table"""
     dna_mutations = [
         {'position': pos+1, 'reference': ref, 'sample': sample} 
         for pos, (ref, sample) in enumerate(zip(reference_dna, sample_dna)) 
         if ref != sample
     ]
     
-    # Use yeast-specific translation
-    ref_protein = reference_dna.translate(table=YEAST_GENETIC_CODE)
-    sample_protein = sample_dna.translate(table=YEAST_GENETIC_CODE)
+    # Use custom codon table for translation
+    ref_protein = translate_dna(reference_dna, codon_table)
+    sample_protein = translate_dna(sample_dna, codon_table)
     
     protein_mutations = [
-        {'position': pos+1, 'wild_type': seq1(wt), 'mutant': seq1(sample)} 
+        {'position': pos+1, 'wild_type': wt, 'mutant': sample}  
         for pos, (wt, sample) in enumerate(zip(ref_protein, sample_protein)) 
         if wt != sample
     ]
@@ -75,6 +91,7 @@ def calculate_quality_metrics(sequences):
 def process_files(input_dir, results_dir, reference_dna, wild_type_protein):
     """Process all sequencing files in directory"""
     reference_dna = Seq(reference_dna)
+    codon_table = load_codon_table()
     
     # Find input files
     input_files = (
@@ -96,7 +113,7 @@ def process_files(input_dir, results_dir, reference_dna, wild_type_protein):
         
         # Analyze each sequence
         for seq in sequences:
-            mutation_details = detect_mutations(reference_dna, seq.seq)
+            mutation_details = detect_mutations(reference_dna, seq.seq, codon_table)
             results['mutations'].append({
                 'sequence_id': seq.id,
                 'mutations': mutation_details
